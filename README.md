@@ -105,5 +105,4 @@ Contributions to `pyGRAPE.py` are welcome. To contribute:
 3. Submit a pull request with a detailed description of your changes.
 
 ## License
-
-Please include your licensing information here.
+[GNU GPLv3](https://github.com/inmo-jang/pyGRAPE/blob/main/LICENSE)
