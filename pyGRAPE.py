@@ -64,7 +64,7 @@ def generate_task_or_agent_location(num_entities, limit, existing_locations=None
                     continue
                 
             if is_task is True: # Additional conditions for tasks
-                if np.any((limit*0.8 > np.abs(candidate))): # task position should not be too inside
+                if np.linalg.norm(limit*0.7) > np.linalg.norm(candidate): # task position should not be too inside
                     continue 
                 
             locations[i] = candidate
