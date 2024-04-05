@@ -86,10 +86,8 @@ def generate_scenario(num_tasks, num_agents, comm_distance=50, gap_agent=15, gap
     - dict: A dictionary containing the generated scenario data including agent and task locations, demands, and the communication matrix.
     """
     agent_locations = generate_task_or_agent_location(num_agents, np.array(agent_location_range), gap=gap_agent, deployment_type=deployment_type)
-    task_locations = generate_task_or_agent_location(num_tasks, np.array(task_location_range), gap=gap_task, is_task=True)
-    
-        
-
+    task_locations = generate_task_or_agent_location(num_tasks, np.array(task_location_range), gap=gap_task, is_task=True)        
+    agent_resources = np.random.uniform(10, 60, num_agents) # agent resource (e.g., energy, capacity)
     task_demands = np.random.uniform(1000 * num_agents / num_tasks, 2000 * num_agents / num_tasks, num_tasks)
 
     # Communication matrix generation
@@ -99,7 +97,9 @@ def generate_scenario(num_tasks, num_agents, comm_distance=50, gap_agent=15, gap
     environment = {
         'task_locations': task_locations, 
         'task_demands': task_demands, 
-        'agent_locations': agent_locations}
+        'agent_locations': agent_locations,
+        'agent_resources': agent_resources
+        }
     
     initial_allocation = np.full(num_agents, -1, dtype=int)  # Initial allocation; "-1" indicates no task assigned
 
@@ -114,24 +114,31 @@ def generate_scenario(num_tasks, num_agents, comm_distance=50, gap_agent=15, gap
         }
 
 ## Functions for Utility Function
-def calculate_utility(agent_id, task_id, num_participants, environment, util_type='logarithm_reward', ignore_cost=False):
+def calculate_utility(agent_id, task_id, current_alloc, environment, util_type='logarithm_reward', ignore_cost=False):
     """
     Calculates the utility of an agent for a task, considering various utility types and whether to ignore the cost.
     
     Parameters:
     - agent_id (int): ID of the agent.
     - task_id (int): ID of the task.
+    - current_alloc (list): the current allocation information over the tasks
     - num_participants (int): Number of participants allocated to the task.
     - environment (dict): Contains agent locations, task locations, and task demands.
-    - util_type (str): Type of utility ('peaked_reward', 'logarithm_reward', 'constant_reward', 'random').
+    - util_type (str): Type of utility ('peaked_reward', 'logarithm_reward', 'constant_reward', 'energy_balanced', 'random').
     - ignore_cost (bool): If True, cost based on distance is not considered in utility calculation.
     
     Returns:
     - float: Calculated utility value.
     """
     agent_locations = environment['agent_locations']
+    agent_resources = environment['agent_resources']
     task_locations = environment['task_locations']
     task_demands = environment['task_demands']
+    
+    # Extract the information about the task-specific coalition that the agent is currently belonging to
+    current_members = (np.array(current_alloc) == task_id)
+    current_members[agent_id] = True  # Include oneself
+    num_participants = np.sum(current_members)    
     
     # Calculate cost as the Euclidean distance between agent and task, with option to ignore it
     cost = 0 if ignore_cost else np.linalg.norm(task_locations[task_id] - agent_locations[agent_id])
@@ -147,6 +154,10 @@ def calculate_utility(agent_id, task_id, num_participants, environment, util_typ
         utility = task_demands[task_id] / (np.log2(len(agent_locations) / len(task_locations) + 1)) * np.log2(num_participants + 1) / num_participants - cost
     elif util_type == 'constant_reward':
         utility = task_demands[task_id] / num_participants - cost
+    elif util_type == 'energy_balanced': # based on `constant_reward`
+        current_members_resources = agent_resources[current_members]
+        agent_contribution = agent_resources[agent_id]/np.sum(current_members_resources)
+        utility = task_demands[task_id] * agent_contribution - cost        
     elif util_type == 'random':
         utility = np.random.rand()
     else:
@@ -215,7 +226,7 @@ def distributed_mutex(agents, agent_comm_matrix):
 
     return agents
 
-def grape_allocation(scenario, display_progress=True):
+def grape_allocation(scenario, display_progress=True, util_type='constant_reward'):
     """
     Executes the GRAPE task allocation algorithm to assign agents to tasks based on their utilities.
 
@@ -258,10 +269,7 @@ def grape_allocation(scenario, display_progress=True):
             candidates = np.full(num_tasks, -np.inf)
 
             for task_id in range(num_tasks):
-                current_members = (current_alloc == task_id)
-                current_members[agent_id] = True  # Include oneself
-                n_participants = np.sum(current_members)
-                candidates[task_id] = calculate_utility(agent_id, task_id, n_participants, environment)
+                candidates[task_id] = calculate_utility(agent_id, task_id, current_alloc, environment, util_type=util_type)
 
             best_task = np.argmax(candidates)
             best_utility = candidates[best_task]
@@ -333,7 +341,11 @@ def visualise_utility(agent_id, task_id, environment, max_participants, util_typ
     participant_range = np.arange(1, max_participants + 1)
     
     for util_type in util_types:
-        utilities = [calculate_utility(agent_id, task_id, n, environment, util_type, ignore_cost=True) for n in participant_range]
+        utilities = []
+        for num_participant in participant_range:
+            current_alloc = [task_id if i < num_participant else -1 for i in range(num_agents)]
+            utility = calculate_utility(agent_id, task_id, current_alloc, environment, util_type, ignore_cost=True)
+            utilities.append(utility)
         plt.subplot(1, 2, 1)
         plt.plot(participant_range, utilities, label=util_type)
         plt.subplot(1, 2, 2)
@@ -357,7 +369,7 @@ def visualise_utility(agent_id, task_id, environment, max_participants, util_typ
     plt.savefig(filename, dpi=300)
     # plt.show()
 
-def visualise_scenario(scenario, final_allocation = None, filename="result_vis.png"):
+def visualise_scenario(scenario, final_allocation = None, filename="result_vis.png", agent_heterogeneity = False):
     """
     Visualises the final allocation of agents to tasks, including the connections between agents.
     
@@ -369,6 +381,7 @@ def visualise_scenario(scenario, final_allocation = None, filename="result_vis.p
     task_locations = scenario['environment']['task_locations']
     agent_locations = scenario['environment']['agent_locations']
     task_demands = scenario['environment']['task_demands']
+    agent_resources = scenario['environment']['agent_resources']
     agent_comm_matrix = scenario['agent_comm_matrix']
     
     colours = plt.cm.viridis(np.linspace(0, 1, len(task_locations)))
@@ -392,7 +405,8 @@ def visualise_scenario(scenario, final_allocation = None, filename="result_vis.p
     for i, location in enumerate(agent_locations):
         alloc = final_allocation[i] if final_allocation is not None else -1
         colour = 'black' if alloc == -1 else colours[int(alloc)]
-        ax.plot(agent_locations[i, 0], agent_locations[i, 1], 'o', markersize=5, markeredgecolor=colour, markerfacecolor=colour)
+        markersize = agent_resources[i]/np.max(agent_resources)*10 if agent_heterogeneity is True else 5
+        ax.plot(agent_locations[i, 0], agent_locations[i, 1], 'o', markersize=markersize, markeredgecolor='gray', markerfacecolor=colour)
             
 
     
