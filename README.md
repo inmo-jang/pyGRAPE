@@ -28,6 +28,10 @@ When you execute `pyGRAPE.py` with its main function as follows, then you will g
 python pyGRAPE.py
 ```
 
+The results will look like this:
+![alt text](https://github.com/inmo-jang/pyGRAPE/blob/main/result_animation.gif)
+
+
 ### Usage Example
 This section provides a more detailed example of using `pyGRAPE.py` to generate a scenario, verify connectivity, visualise the scenario, check utility, perform task allocation, and generate a process animation as a GIF.
 
