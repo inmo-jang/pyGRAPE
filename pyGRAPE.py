@@ -86,7 +86,10 @@ def generate_scenario(num_tasks, num_agents, comm_distance=50, gap_agent=15, gap
     - dict: A dictionary containing the generated scenario data including agent and task locations, demands, and the communication matrix.
     """
     agent_locations = generate_task_or_agent_location(num_agents, np.array(agent_location_range), gap=gap_agent, deployment_type=deployment_type)
-    task_locations = generate_task_or_agent_location(num_tasks, np.array(task_location_range), gap=gap_task, is_task=True)        
+    print(f"[generate_scenario] Generated agent_locations")
+    task_locations = generate_task_or_agent_location(num_tasks, np.array(task_location_range), gap=gap_task, is_task=True)
+    print(f"[generate_scenario] Generated task_locations")
+        
     agent_resources = np.random.uniform(10, 60, num_agents) # agent resource (e.g., energy, capacity)
     task_demands = np.random.uniform(1000 * num_agents / num_tasks, 2000 * num_agents / num_tasks, num_tasks)
 
@@ -392,8 +395,8 @@ def visualise_scenario(scenario, final_allocation = None, filename="result_vis.p
     fig, ax = plt.subplots(figsize=(5, 5))
     ax.grid(True)
     ax.set_aspect('equal')
-    ax.set_xlim([-np.max(task_locations) * 1.1, np.max(task_locations) * 1.1])
-    ax.set_ylim([-np.max(task_locations) * 1.1, np.max(task_locations) * 1.1])
+    ax.set_xlim([-np.max(task_locations) * 1.4, np.max(task_locations) * 1.4])
+    ax.set_ylim([-np.max(task_locations) * 1.4, np.max(task_locations) * 1.4])
     ax.set_xlabel('X Coordinate')
     ax.set_ylabel('Y Coordinate')
     
@@ -417,9 +420,11 @@ def visualise_scenario(scenario, final_allocation = None, filename="result_vis.p
     title_name = 'Task Allocation Result' if final_allocation is not None else 'Locations of Agents and Tasks with Communication Links'
     plt.title(title_name) 
     plt.legend()
-    # plt.show()
-    plt.savefig(filename, dpi=300)
-    plt.close()
+    if filename is None:
+        pass
+    else:
+        plt.savefig(filename, dpi=300)
+        plt.close()
 
 def generate_gif_from_history(scenario, allocation_result, filename='result_animation.gif'):
     
